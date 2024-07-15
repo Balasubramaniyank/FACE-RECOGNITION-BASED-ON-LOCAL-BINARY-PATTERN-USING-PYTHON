@@ -1,0 +1,328 @@
+#!/usr/bin/env python
+# coding: utf-8
+# In[1]:
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+import cv2
+import os
+import random
+from tqdm import tqdm
+from sklearn.model_selection import train_test_split
+import tensorflow as tf
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.callbacks import Callback, EarlyStopping,
+ReduceLROnPlateau
+from tensorflow.keras.layers import Conv2D, BatchNormalization, MaxPool2D,
+Dropout, Flatten, Dense
+from tensorflow.keras.optimizers import Adam,RMSprop,SGD,Adamax
+from tensorflow.keras import regularizers
+# In[2]:
+pip install keras
+# In[3]:
+pip install opencv_python
+# In[4]:
+pip install tensorflow
+# In[5]:
+np.random.seed(42)
+# In[6]:
+os.listdir('F:\\project\\ABT-639\\data')
+# In[20]:
+train_dir = 'F:\\project\\ABT-639\\data\\train\\'
+test_dir = 'F:\\project\\ABT-639\\data\\test\\'
+# In[21]:
+data = r'F:\\project\\ABT-639\\data\\train'
+# In[22]:
+batch_size=32
+dataset = tf.keras.preprocessing.image_dataset_from_directory(
+train_dir,
+seed=123,
+shuffle=True,
+image_size=(150,150),
+batch_size=batch_size
+)
+# In[23]:
+val_ds = tf.keras.preprocessing.image_dataset_from_directory(
+test_dir,
+seed=123,
+shuffle=True,
+image_size=(150,150),
+batch_size=batch_size
+)
+# In[24]:
+catagories = os.listdir(data)
+catagories
+# In[25]:
+class_names=dataset.class_names
+# In[26]:
+def load_data():
+datadir= r'F:\\project\\ABT-639\\data\\train'
+data = []
+for category in catagories:
+path = os.path.join(datadir, category)
+class_num = catagories.index(category)
+for img in tqdm(os.listdir(path)):
+img_array = cv2.imread(os.path.join(path, img), 0)
+data.append([img_array, class_num])
+return data
+# In[27]:
+data = load_data()
+# In[28]:
+len(data)
+# In[29]:
+L = 4
+W = 4
+fig, axes = plt.subplots(L, W, figsize = (15,15))
+axes = axes.ravel()
+for i in range(0, L * W):
+sample = random.choice(data)
+axes[i].set_title("Expression = "+str(catagories[sample[1]]))
+axes[i].imshow(sample[0], cmap='gray')
+axes[i].axis('off')
+plt.subplots_adjust(wspace=0.5)
+# In[30]:
+X = np.array([ x[0] for x in data])
+y = np.array([Y[1] for Y in data])
+# In[31]:
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2,
+random_state=42, shuffle = True)
+# In[32]:
+print("X_train shape: ", X_train.shape)
+print("y_train shape: ", y_train.shape)
+print("X_test shape: ", X_test.shape)
+print("y_test shape: ", y_test.shape)
+# In[33]:
+# reshaping y_train and y_test
+y_train = np.reshape(y_train, (len(y_train),1))
+y_test = np.reshape(y_test , (len(y_test ),1))
+print("y_train shape: ", y_train.shape)
+print("y_test shape: ", y_test.shape)
+# In[34]:
+X_train_Gabor = X_train
+X_test_Gabor = X_test
+# In[35]:
+X_train = np.expand_dims(X_train, axis=3)
+X_test = np.expand_dims(X_test, axis=3)
+print("X_train shape: ", X_train.shape)
+print("X_test shape: ", X_test.shape)
+# In[36]:
+X_train = X_train / 255.0
+X_test = X_test / 255.0
+# In[37]:
+y_train[0]
+# In[38]:
+y_train_SVM = y_train
+y_test_SVM = y_test
+y_train = tf.keras.utils.to_categorical(y_train)
+y_test = tf.keras.utils.to_categorical(y_test)
+# In[39]:
+y_train[0]
+# In[40]:
+y_train.shape, y_test.shape
+# In[41]:
+def Binarypattern(im):
+img= np.zeros_like(im)
+n=3
+for i in range(0,im.shape[0]-n):
+for j in range(0,im.shape[1]-n):
+x = im[i:i+n,j:j+n]
+center = x[1,1]
+img1 = (x >= center)*1.0
+img1_vector = img1.T.flatten()
+img1_vector = np.delete(img1_vector,4)
+digit = np.where(img1_vector)[0]
+if len(digit) >= 1:
+num = np.sum(2**digit)
+else:
+num = 0
+img[i+1,j+1] = num
+return(img)
+# In[42]:
+plt.figure(figsize = (10,10))
+plt.subplot(1,2,1)
+img = random.choice(X_train)
+plt.title("Original image")
+plt.imshow(img, cmap='gray')
+plt.subplot(1,2,2)
+plt.title("LBP")
+imgLBP=Binarypattern(img)
+plt.imshow(imgLBP, cmap='gray')
+plt.axis('off')
+# In[43]:
+X_train.shape
+# In[44]:
+def create_LBP_features(data):
+Feature_data = np.zeros(data.shape)
+for i in range(len(data)):
+img = data[i]
+imgLBP=Binarypattern(img)
+Feature_data[i] = imgLBP
+return Feature_data
+# In[45]:
+Feature_X_train = create_LBP_features(X_train)
+# In[46]:
+Feature_X_train.shape
+# In[47]:
+img = random.choice(Feature_X_train)
+plt.imshow(img, cmap='gray')
+# In[48]:
+Feature_X_test = create_LBP_features(X_test)
+Feature_X_test.shape
+# In[49]:
+img = random.choice(Feature_X_test)
+plt.imshow(img, cmap='gray')
+# In[50]:
+model = Sequential()
+model.add(Conv2D(6, (5, 5), input_shape=(48,48,1), padding='same', activation
+= 'relu'))
+model.add(MaxPool2D(pool_size=(2, 2)))
+model.add(Conv2D(16, (5, 5), padding='same', activation = 'relu'))
+model.add(MaxPool2D(pool_size=(2, 2)))
+model.add(Conv2D(64, (3, 3), activation = 'relu'))
+model.add(MaxPool2D(pool_size=(2, 2)))
+model.add(Flatten())
+model.add(Dense(128, activation = 'relu'))
+model.add(Dropout(0.5))
+model.add(Dense(7, activation = 'softmax'))
+# In[51]:
+es = EarlyStopping(
+monitor='val_accuracy', min_delta=0.0001, patience=10, verbose=2,
+mode='max', baseline=None, restore_best_weights=True
+)
+lr = ReduceLROnPlateau(
+monitor='val_accuracy', factor=0.1, patience=5, verbose=2,
+mode='max', min_delta=1e-5, cooldown=0, min_lr=0
+)
+callbacks = [es, lr]
+# In[52]:
+LBP_model = model
+# In[53]:
+LBP_model.compile(loss='categorical_crossentropy', metrics=['accuracy'],
+optimizer='adam' )
+# In[54]:
+LBP_history = LBP_model.fit(Feature_X_train, y_train, batch_size=8 ,
+epochs=50, validation_data = (Feature_X_test, y_test) ,callbacks = [callbacks])
+# In[55]:
+plt.figure(figsize=(18, 6))
+plt.subplot(1, 2, 1)
+plt.plot(LBP_history.history['loss'], label='train')
+plt.plot(LBP_history.history['val_loss'], label='val')
+plt.legend()
+plt.grid()
+plt.title('train and val loss evolution')
+plt.subplot(1, 2, 2)
+plt.plot(LBP_history.history['accuracy'], label='train')
+plt.plot(LBP_history.history['val_accuracy'], label='val')
+plt.legend()
+plt.grid()
+plt.title('train and val accuracy')
+# In[56]:
+acc = []
+LBP_acc = LBP_model.evaluate(Feature_X_test, y_test, verbose = 0)[1]
+acc.append(LBP_acc)
+print("LBP Accuracy :",LBP_model.evaluate(Feature_X_test, y_test, verbose =
+0)[1])
+# In[57]:
+y_pred =LBP_model.predict(Feature_X_test)
+from sklearn.metrics import f1_score, precision_score, recall_score,
+accuracy_score
+acc = accuracy_score(y_test, y_pred.round())
+recall = recall_score(y_test, y_pred.round(),average='micro')
+precision = precision_score(y_test, y_pred.round(),average='micro')
+f1s = f1_score(y_test, y_pred.round(),average='micro')
+print("Accuracy: "+ "{:.2%}".format(acc))
+print("Recall: "+ "{:.2%}".format(recall))
+print("Precision: "+ "{:.2%}".format(precision))
+print("F1-Score: "+ "{:.2%}".format(f1s))
+# In[58]:
+def get_dataset_partitions_tf(ds, train_split=0.9, test_split=0.1, shuffle=True,
+shuffle_size=10000):
+assert (train_split + test_split) == 1
+ds_size = len(ds)
+if shuffle:
+ds = ds.shuffle(shuffle_size, seed=12)
+train_size = int(train_split * ds_size)
+test_size = int(test_split * ds_size)
+train_ds = ds.take(train_size)
+test_ds = ds.skip(train_size).take(test_size)
+return train_ds, test_ds
+# In[59]:
+train_ds, test_ds = get_dataset_partitions_tf(dataset)
+# In[60]:
+train_ds =
+train_ds.cache().shuffle(1000).prefetch(buffer_size=tf.data.AUTOTUNE)
+val_ds =
+val_ds.cache().shuffle(1000).prefetch(buffer_size=tf.data.AUTOTUNE)
+test_ds =
+test_ds.cache().shuffle(1000).prefetch(buffer_size=tf.data.AUTOTUNE)
+# In[61]:
+from keras.layers import Conv2D, MaxPooling2D ,
+AveragePooling2D,GlobalAveragePooling2D
+# In[62]:
+def model(width , height):
+model = Sequential()
+model.add(Conv2D(30, kernel_size=(3, 3),
+activation='relu',
+input_shape=( width, height, 3)))
+model.add(MaxPooling2D(pool_size=(2, 2)))
+model.add(Conv2D(15, (3, 3), activation='relu'))
+model.add(MaxPooling2D(pool_size=(2, 2)))
+model.add(Dropout(0.25))
+model.add(Flatten())
+model.add(Dense(128, activation='relu'))
+model.add(Dropout(0.5))
+model.add(Dense(50, activation='relu'))
+model.add(Dense(25, activation='softmax'))
+model.compile(loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits
+=False), optimizer = 'adam', metrics=['accuracy'])
+return model
+# In[63]:
+model=model(150 , 150)
+# In[64]:
+model_fit = model.fit(train_ds, epochs=20 ,batch_size = batch_size
+,validation_data=val_ds, verbose =1)
+# In[65]:
+model.save("face.h5")
+# In[66]:
+for images_batch, labels_batch in test_ds.take(1):
+first_image = images_batch[0].numpy().astype('uint8')
+first_label = labels_batch[0].numpy()
+print("first image to predict")
+plt.imshow(first_image)
+print("actual label:",class_names[first_label])
+batch_prediction = model.predict(images_batch)
+print("predicted label:",class_names[np.argmax(batch_prediction[0])])
+# In[67]:
+def predict(model, img):
+img_array = tf.keras.preprocessing.image.img_to_array(images[i].numpy())
+img_array = tf.expand_dims(img_array, 0)
+predictions = model.predict(img_array)
+predicted_class = class_names[np.argmax(predictions[0])]
+confidence = round(100 * (np.max(predictions[0])), 2)
+return predicted_class, confidence
+# In[68]:
+plt.figure(figsize=(15, 15))
+for images, labels in train_ds.take(3):
+for i in range(9):
+ax = plt.subplot(3, 3, i + 1)
+plt.imshow(images[i].numpy().astype("uint8"))
+predicted_class, confidence = predict(model, images[i].numpy())
+actual_class = class_names[labels[i]]
+plt.title(f"Actual: {actual_class},\n Predicted: {predicted_class}.\n
+Confidence: {confidence}%")
+plt.axis("off")
+# In[69]:
+model.summary()
+# In[70]:
+from keras.models import load_model
+model=load_model("face.h5")
+# In[71]:
+from keras.preprocessing import image
+import keras.utils as image
+img_path="F:\\project\\ABT-639\\data\\input\\4.png"
+img = image.load_img(img_path, target_size=(150, 150))
+plt.imshow(img)
+img_tensor = image.img_to_array(img)
+img_tensor = np.expand_dims(img_tensor, axis=0)
